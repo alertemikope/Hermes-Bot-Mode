@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-HERMES_SOURCE="${HERMES_SOURCE:-$ROOT/../hermes-agent}"
+HERMES_SOURCE="${HERMES_SOURCE:-$ROOT/../../hermes-agent}"
 [[ -f "$HERMES_SOURCE/Dockerfile" ]] || { echo "Hermes source missing at $HERMES_SOURCE" >&2; exit 1; }
 [[ -f "$ROOT/.env" ]] || { echo "Create $ROOT/.env from .env.example first" >&2; exit 1; }
 
