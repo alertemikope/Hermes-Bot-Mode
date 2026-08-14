@@ -11,6 +11,8 @@ services:
       BOX_BROKER_TOKEN: ${BOX_BROKER_TOKEN:?BOX_BROKER_TOKEN is required}
       BOX_PUBLIC_HOST: ${TAILSCALE_IP}
       BOX_MAX_SESSIONS: 12
+      BOX_SESSION_UID: ${HERMES_UID:-1000}
+      BOX_SESSION_GID: ${HERMES_GID:-1000}
     volumes:
       - box-data:/data
       - box-sockets:/run/hermes-box

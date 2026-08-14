@@ -6,7 +6,7 @@ ARG CUA_DRIVER_SHA256=3f327a444f5b666037dee5e7c15c98990abbfb4fe83669ef708cb34c2c
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash ca-certificates chromium curl dbus-x11 fluxbox fonts-dejavu-core \
-      fonts-liberation novnc procps python3 python3-venv websockify x11-utils \
+      fonts-liberation novnc procps python3 python3-venv util-linux websockify x11-utils \
       x11-xserver-utils x11vnc xdotool xterm xvfb \
     && rm -rf /var/lib/apt/lists/* \
     && wheel="/tmp/cua_driver-${CUA_DRIVER_VERSION}-py3-none-manylinux_2_31_x86_64.whl" \
