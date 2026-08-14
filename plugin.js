@@ -1397,16 +1397,22 @@ function composeSoul({ name, title, description, roster, customSoul }) {
 // ── bot row ──────────────────────────────────────────────────────────────────
 
 function BotRow({ bot, onEdit }) {
-  const activeProfile = useValue(host.state.profile)
+  const selectedBot = useValue($selectedBot)
+  const gatewayProfile = useValue(host.state.profile)
   const meta = useValue($botMeta)[bot.name]
   const last = bot.last_session
-  const isActive = bot.name === activeProfile
+  // Roster selection is an intent/UI state: keep the clicked bot highlighted
+  // even while its pooled gateway is waking up or agent initialization fails.
+  // host.state.profile only changes after a successful gateway swap, so using
+  // it here made the previous bot remain highlighted during exactly the error
+  // state where users most need to know which bot they selected.
+  const isActive = bot.name === selectedBot
   const { shape, color, image } = botAppearance(bot.name, meta)
   // Reactive eyes: scan while this bot's backend is running a turn in the
   // active window; calm otherwise. gatewayState is app-wide, so scope to the
   // active profile's row only.
   const gatewayState = useValue(host.state.gateway)
-  const botMood = isActive && gatewayState === 'busy' ? 'work' : 'idle'
+  const botMood = bot.name === gatewayProfile && gatewayState === 'busy' ? 'work' : 'idle'
   const unread = Boolean(useValue($botUnread)[bot.name])
 
   const open = async () => {
@@ -2988,10 +2994,10 @@ function CreateRoutineDialog({ bot, open, onClose }) {
 function RoutinesPane() {
   const selected = useValue($selectedBot)
   const gatewayProfile = useValue(host.state.profile)
-  // The tile maps to the bot you're chatting with: the live gateway profile
-  // is the truth once a chat opens; $selectedBot covers the gap between a
-  // roster click and the profile swap landing.
-  const bot = (gatewayProfile || selected || 'default').trim() || 'default'
+  // Selection is immediate while the live gateway profile only changes after
+  // a successful swap. Prefer the selected bot so routines and Computer stay
+  // aligned with the highlighted roster row during wake-up and auth errors.
+  const bot = (selected || gatewayProfile || 'default').trim() || 'default'
   const meta = useValue($botMeta)[bot]
   const { shape, color, image } = botAppearance(bot, meta)
   const { data, isLoading, refetch } = useRoutines()
