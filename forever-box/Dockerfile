@@ -9,15 +9,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       fonts-liberation novnc procps python3 python3-venv websockify x11-utils \
       x11-xserver-utils x11vnc xdotool xterm xvfb \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -fsSL "$CUA_DRIVER_URL" -o /tmp/cua-driver.whl \
-    && echo "$CUA_DRIVER_SHA256  /tmp/cua-driver.whl" | sha256sum -c - \
+    && wheel="/tmp/cua_driver-${CUA_DRIVER_VERSION}-py3-none-manylinux_2_31_x86_64.whl" \
+    && curl -fsSL "$CUA_DRIVER_URL" -o "$wheel" \
+    && echo "$CUA_DRIVER_SHA256  $wheel" | sha256sum -c - \
     && python3 -m venv /opt/cua \
-    && /opt/cua/bin/pip install --no-cache-dir --no-deps /tmp/cua-driver.whl \
+    && /opt/cua/bin/pip install --no-cache-dir --no-deps "$wheel" \
     && driver_bin="$(find /opt/cua/lib -path '*/cua_driver/bin/cua-driver' -type f -print -quit)" \
     && test -n "$driver_bin" \
     && install -m 0755 "$driver_bin" /usr/local/bin/cua-driver \
     && test "$(cua-driver --version)" = "cua-driver ${CUA_DRIVER_VERSION}" \
-    && rm -f /tmp/cua-driver.whl \
+    && rm -f "$wheel" \
     && mkdir -p /data/profiles /run/hermes-box /var/log/forever-box
 
 COPY broker.py /usr/local/lib/forever-box/broker.py
