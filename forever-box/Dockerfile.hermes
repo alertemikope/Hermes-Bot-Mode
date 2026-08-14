@@ -15,7 +15,8 @@ RUN wheel="/tmp/cua_driver-${CUA_DRIVER_VERSION}-py3-none-manylinux_2_31_x86_64.
     && install -m 0755 "$driver_bin" /usr/local/bin/cua-driver \
     && test "$(cua-driver --version)" = "cua-driver ${CUA_DRIVER_VERSION}" \
     && rm -f "$wheel" \
-    && npm install --global --omit=dev --allow-scripts=@googleworkspace/cli "@googleworkspace/cli@${GOOGLE_WORKSPACE_CLI_VERSION}" \
+    && npm install --global --omit=dev --ignore-scripts "@googleworkspace/cli@${GOOGLE_WORKSPACE_CLI_VERSION}" \
+    && node "$(npm root --global)/@googleworkspace/cli/install.js" \
     && test "$(gws --version)" = "gws ${GOOGLE_WORKSPACE_CLI_VERSION}"
 COPY --chmod=0755 hermes-cua-wrapper /usr/local/bin/hermes-cua-wrapper
 ENV HERMES_CUA_DRIVER_CMD=/usr/local/bin/hermes-cua-wrapper
