@@ -9,6 +9,7 @@ WEB_PORT=$((6080 + SLOT))
 export DISPLAY=":${DISPLAY_NUMBER}"
 export HOME="${BOX_DATA:-/data}/profiles/${PROFILE}"
 export XDG_RUNTIME_DIR="/tmp/forever-box-${PROFILE}"
+export NO_AT_BRIDGE=0
 SOCKET="${BOX_SOCKET_DIR:-/run/hermes-box}/${PROFILE}.sock"
 LOG_DIR="/var/log/forever-box/${PROFILE}"
 SESSION_UID="${BOX_SESSION_UID:-1000}"
@@ -17,6 +18,20 @@ PIDS=()
 
 mkdir -p "$HOME/chromium" "$HOME/.config/fluxbox" "$XDG_RUNTIME_DIR" "$LOG_DIR" /tmp/.X11-unix
 if [[ "$(id -u)" == "0" && "${BOX_SESSION_DROPPED:-0}" != "1" ]]; then
+  # dbus-daemon refuses to start for a numeric uid that NSS cannot resolve.
+  # Keep non-default BOX_SESSION_UID/GID overrides working as well as the
+  # image's built-in uid 1000 entry. Multiple restored profiles may race here,
+  # so serialize the small local NSS update.
+  (
+    flock 9
+    if ! getent group "$SESSION_GID" >/dev/null; then
+      printf 'hermes-box-%s:x:%s:\n' "$SESSION_GID" "$SESSION_GID" >> /etc/group
+    fi
+    if ! getent passwd "$SESSION_UID" >/dev/null; then
+      printf 'hermes-box-%s:x:%s:%s:Hermes Forever Box:%s:/usr/sbin/nologin\n' \
+        "$SESSION_UID" "$SESSION_UID" "$SESSION_GID" "$HOME" >> /etc/passwd
+    fi
+  ) 9>/tmp/hermes-box-nss.lock
   chown -R "$SESSION_UID:$SESSION_GID" "$HOME" "$XDG_RUNTIME_DIR" "$LOG_DIR"
   chmod 0777 "${BOX_SOCKET_DIR:-/run/hermes-box}"
   exec env BOX_SESSION_DROPPED=1 setpriv \
@@ -40,13 +55,30 @@ for _ in $(seq 1 100); do
 done
 xdpyinfo -display "$DISPLAY" >/dev/null 2>&1
 
-eval "$(dbus-launch --sh-syntax)"
+dbus_env="$(dbus-launch --sh-syntax 2>>"$LOG_DIR/dbus.log")"
+eval "$dbus_env"
+export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
+
+# Force activation of the per-session AT-SPI registry before Chromium and the
+# CUA daemon start. This makes semantic inspection deterministic instead of
+# relying on the first accessibility query to win a startup race.
+for _ in $(seq 1 50); do
+  if dbus-send --session --print-reply --dest=org.a11y.Bus \
+      /org/a11y/bus org.a11y.Bus.GetAddress >>"$LOG_DIR/at-spi.log" 2>&1; then
+    break
+  fi
+  sleep 0.1
+done
+dbus-send --session --print-reply --dest=org.a11y.Bus \
+  /org/a11y/bus org.a11y.Bus.GetAddress >>"$LOG_DIR/at-spi.log" 2>&1
+
 xsetroot -solid '#111113' >/dev/null 2>&1 || true
 fluxbox >"$LOG_DIR/fluxbox.log" 2>&1 &
 PIDS+=("$!")
 
 chromium \
   --no-sandbox --disable-dev-shm-usage --disable-gpu --no-first-run \
+  --force-renderer-accessibility \
   --no-default-browser-check --disable-session-crashed-bubble \
   --password-store=basic --user-data-dir="$HOME/chromium" --start-maximized \
   about:blank >"$LOG_DIR/chromium.log" 2>&1 &

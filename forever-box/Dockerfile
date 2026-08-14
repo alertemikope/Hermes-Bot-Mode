@@ -5,7 +5,7 @@ ARG CUA_DRIVER_URL=https://files.pythonhosted.org/packages/88/26/1b372765b192a2f
 ARG CUA_DRIVER_SHA256=3f327a444f5b666037dee5e7c15c98990abbfb4fe83669ef708cb34c2cafef14
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      bash ca-certificates chromium curl dbus-x11 fluxbox fonts-dejavu-core \
+      at-spi2-core bash ca-certificates chromium curl dbus-x11 fluxbox fonts-dejavu-core \
       fonts-liberation novnc procps python3 python3-venv util-linux websockify x11-utils \
       x11-xserver-utils x11vnc xdotool xterm xvfb \
     && rm -rf /var/lib/apt/lists/* \
@@ -19,7 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && install -m 0755 "$driver_bin" /usr/local/bin/cua-driver \
     && test "$(cua-driver --version)" = "cua-driver ${CUA_DRIVER_VERSION}" \
     && rm -f "$wheel" \
-    && mkdir -p /data/profiles /run/hermes-box /var/log/forever-box
+    && mkdir -p /data/profiles /run/hermes-box /var/log/forever-box \
+    && { getent group 1000 >/dev/null || printf 'hermes:x:1000:\n' >> /etc/group; } \
+    && { getent passwd 1000 >/dev/null || printf 'hermes:x:1000:1000:Hermes Forever Box:/data:/usr/sbin/nologin\n' >> /etc/passwd; }
 
 COPY broker.py /usr/local/lib/forever-box/broker.py
 COPY start-session.sh /usr/local/bin/start-forever-box-session
