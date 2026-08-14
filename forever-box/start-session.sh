@@ -40,6 +40,10 @@ if [[ "$(id -u)" == "0" && "${BOX_SESSION_DROPPED:-0}" != "1" ]]; then
 fi
 chmod 0700 "$XDG_RUNTIME_DIR"
 rm -f "/tmp/.X${DISPLAY_NUMBER}-lock" "/tmp/.X11-unix/X${DISPLAY_NUMBER}" "$SOCKET"
+# Chromium stores these process-singleton artifacts in the persistent profile.
+# They are valid only for the container instance that created them and would
+# otherwise block the browser after a normal container recreation.
+rm -f "$HOME/chromium/SingletonLock" "$HOME/chromium/SingletonSocket" "$HOME/chromium/SingletonCookie"
 
 cleanup() {
   for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done
@@ -48,7 +52,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 Xvfb "$DISPLAY" -screen 0 1440x900x24 -ac +extension RANDR +extension XTEST +render -noreset >"$LOG_DIR/xvfb.log" 2>&1 &
-PIDS+=("$!")
+XVFB_PID="$!"
+PIDS+=("$XVFB_PID")
 for _ in $(seq 1 100); do
   xdpyinfo -display "$DISPLAY" >/dev/null 2>&1 && break
   sleep 0.1
@@ -82,7 +87,8 @@ chromium \
   --no-default-browser-check --disable-session-crashed-bubble \
   --password-store=basic --user-data-dir="$HOME/chromium" --start-maximized \
   about:blank >"$LOG_DIR/chromium.log" 2>&1 &
-PIDS+=("$!")
+CHROMIUM_PID="$!"
+PIDS+=("$CHROMIUM_PID")
 
 x11vnc -display "$DISPLAY" -forever -shared -nopw -listen 127.0.0.1 \
   -rfbport "$VNC_PORT" -xkb -ncache 0 >"$LOG_DIR/x11vnc.log" 2>&1 &
@@ -92,11 +98,15 @@ PIDS+=("$!")
 
 CUA_DRIVER_RS_TELEMETRY_ENABLED=0 cua-driver serve --socket "$SOCKET" \
   --permission-mode standard >"$LOG_DIR/cua-driver.log" 2>&1 &
-PIDS+=("$!")
+CUA_PID="$!"
+PIDS+=("$CUA_PID")
 for _ in $(seq 1 100); do
   if [[ -S "$SOCKET" ]]; then chmod 0666 "$SOCKET"; break; fi
   sleep 0.1
 done
 [[ -S "$SOCKET" ]]
+kill -0 "$CHROMIUM_PID"
 
-wait "${PIDS[0]}"
+# These three processes define a usable session. If any exits, tear down the
+# rest so the broker observes the failure and can rebuild a coherent desktop.
+wait -n "$XVFB_PID" "$CHROMIUM_PID" "$CUA_PID"
