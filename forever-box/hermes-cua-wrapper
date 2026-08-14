@@ -30,7 +30,7 @@ case "${1:-}" in
     ;;
   mcp)
     shift
-    exec "$REAL_DRIVER" mcp --embedded --socket "$SOCKET" "$@"
+    exec "$REAL_DRIVER" mcp --socket "$SOCKET" "$@"
     ;;
   status|stop)
     verb="$1"; shift

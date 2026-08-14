@@ -49,7 +49,7 @@ PIDS+=("$!")
 websockify --web=/usr/share/novnc "0.0.0.0:${WEB_PORT}" "127.0.0.1:${VNC_PORT}" >"$LOG_DIR/novnc.log" 2>&1 &
 PIDS+=("$!")
 
-CUA_DRIVER_RS_TELEMETRY_ENABLED=0 cua-driver serve --embedded --socket "$SOCKET" \
+CUA_DRIVER_RS_TELEMETRY_ENABLED=0 cua-driver serve --socket "$SOCKET" \
   --permission-mode standard >"$LOG_DIR/cua-driver.log" 2>&1 &
 PIDS+=("$!")
 for _ in $(seq 1 100); do
