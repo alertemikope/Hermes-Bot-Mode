@@ -20,7 +20,7 @@ RUN wheel="/tmp/cua_driver-${CUA_DRIVER_VERSION}-py3-none-manylinux_2_31_x86_64.
     && rm -f "$wheel" \
     && npm install --global --omit=dev --ignore-scripts "@googleworkspace/cli@${GOOGLE_WORKSPACE_CLI_VERSION}" \
     && node "$(npm root --global)/@googleworkspace/cli/install.js" \
-    && test "$(gws --version)" = "gws ${GOOGLE_WORKSPACE_CLI_VERSION}" \
+    && gws --version | grep -qx "gws ${GOOGLE_WORKSPACE_CLI_VERSION}" \
     && pennylane_archive="/tmp/mcp-pennylane-${PENNYLANE_MCP_VERSION}.tar.gz" \
     && curl -fsSL "$PENNYLANE_MCP_URL" -o "$pennylane_archive" \
     && echo "$PENNYLANE_MCP_SHA256  $pennylane_archive" | sha256sum -c - \
