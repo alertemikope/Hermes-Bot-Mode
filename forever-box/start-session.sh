@@ -16,8 +16,14 @@ SESSION_GID="${BOX_SESSION_GID:-1000}"
 PIDS=()
 
 mkdir -p "$HOME/chromium" "$HOME/.config/fluxbox" "$XDG_RUNTIME_DIR" "$LOG_DIR" /tmp/.X11-unix
+if [[ "$(id -u)" == "0" && "${BOX_SESSION_DROPPED:-0}" != "1" ]]; then
+  chown -R "$SESSION_UID:$SESSION_GID" "$HOME" "$XDG_RUNTIME_DIR" "$LOG_DIR"
+  chmod 0777 "${BOX_SOCKET_DIR:-/run/hermes-box}"
+  exec env BOX_SESSION_DROPPED=1 setpriv \
+    --reuid="$SESSION_UID" --regid="$SESSION_GID" --clear-groups \
+    "$0" "$@"
+fi
 chmod 0700 "$XDG_RUNTIME_DIR"
-chown -R "$SESSION_UID:$SESSION_GID" "$HOME" "$XDG_RUNTIME_DIR"
 rm -f "/tmp/.X${DISPLAY_NUMBER}-lock" "/tmp/.X11-unix/X${DISPLAY_NUMBER}" "$SOCKET"
 
 cleanup() {
@@ -52,9 +58,7 @@ PIDS+=("$!")
 websockify --web=/usr/share/novnc "0.0.0.0:${WEB_PORT}" "127.0.0.1:${VNC_PORT}" >"$LOG_DIR/novnc.log" 2>&1 &
 PIDS+=("$!")
 
-CUA_DRIVER_RS_TELEMETRY_ENABLED=0 setpriv \
-  --reuid="$SESSION_UID" --regid="$SESSION_GID" --clear-groups \
-  cua-driver serve --socket "$SOCKET" \
+CUA_DRIVER_RS_TELEMETRY_ENABLED=0 cua-driver serve --socket "$SOCKET" \
   --permission-mode standard >"$LOG_DIR/cua-driver.log" 2>&1 &
 PIDS+=("$!")
 for _ in $(seq 1 100); do
