@@ -1,0 +1,76 @@
+services:
+  forever-box:
+    build: .
+    image: hermes-forever-box:local
+    container_name: hermes-forever-box
+    restart: unless-stopped
+    ports:
+      - "${TAILSCALE_IP}:8787:8787"
+      - "${TAILSCALE_IP}:6080-6091:6080-6091"
+    environment:
+      BOX_BROKER_TOKEN: ${BOX_BROKER_TOKEN:?BOX_BROKER_TOKEN is required}
+      BOX_PUBLIC_HOST: ${TAILSCALE_IP}
+      BOX_MAX_SESSIONS: 12
+    volumes:
+      - box-data:/data
+      - box-sockets:/run/hermes-box
+    shm_size: 2gb
+    mem_limit: 12g
+    cpus: 8
+    pids_limit: 2048
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.hermes
+    image: hermes-agent-forever-box:local
+    container_name: hermes-gateway
+    restart: unless-stopped
+    depends_on:
+      forever-box:
+        condition: service_healthy
+    volumes:
+      - ./data:/opt/data
+      - box-sockets:/run/hermes-box
+    environment:
+      HERMES_UID: ${HERMES_UID:-1000}
+      HERMES_GID: ${HERMES_GID:-1000}
+      HERMES_BOX_BROKER_URL: http://forever-box:8787
+      HERMES_BOX_BROKER_TOKEN: ${BOX_BROKER_TOKEN:?BOX_BROKER_TOKEN is required}
+    command: ["gateway", "run"]
+
+  dashboard:
+    image: hermes-agent-forever-box:local
+    container_name: hermes-dashboard
+    restart: unless-stopped
+    depends_on:
+      forever-box:
+        condition: service_healthy
+    ports:
+      - "${TAILSCALE_IP}:9119:9119"
+    volumes:
+      - ./data:/opt/data
+      - box-sockets:/run/hermes-box
+    environment:
+      HERMES_UID: ${HERMES_UID:-1000}
+      HERMES_GID: ${HERMES_GID:-1000}
+      HERMES_BOX_BROKER_URL: http://forever-box:8787
+      HERMES_BOX_BROKER_TOKEN: ${BOX_BROKER_TOKEN:?BOX_BROKER_TOKEN is required}
+    command: ["dashboard", "--host", "0.0.0.0", "--no-open"]
+
+volumes:
+  box-data:
+  box-sockets:

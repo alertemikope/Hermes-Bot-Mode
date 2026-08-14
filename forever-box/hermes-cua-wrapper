@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REAL_DRIVER="${HERMES_CUA_REAL_DRIVER:-/usr/local/bin/cua-driver}"
+BROKER="${HERMES_BOX_BROKER_URL:-http://forever-box:8787}"
+TOKEN="${HERMES_BOX_BROKER_TOKEN:-}"
+PROFILE="default"
+
+if [[ "${HERMES_HOME:-}" == */profiles/* ]]; then
+  PROFILE="$(basename "$HERMES_HOME")"
+fi
+if [[ ! "$PROFILE" =~ ^[a-z0-9][a-z0-9_-]{0,63}$ ]]; then
+  echo "invalid Hermes profile for computer routing" >&2
+  exit 2
+fi
+
+auth=()
+[[ -n "$TOKEN" ]] && auth=(-H "Authorization: Bearer $TOKEN")
+curl -fsS -X POST "${BROKER}/v1/profiles/${PROFILE}/ensure" "${auth[@]}" >/dev/null
+SOCKET="/run/hermes-box/${PROFILE}.sock"
+for _ in $(seq 1 100); do [[ -S "$SOCKET" ]] && break; sleep 0.1; done
+[[ -S "$SOCKET" ]] || { echo "Forever Box socket is unavailable for $PROFILE" >&2; exit 1; }
+
+case "${1:-}" in
+  manifest)
+    printf '%s\n' '{"mcp_invocation":{"command":"/usr/local/bin/hermes-cua-wrapper","args":["mcp"]}}'
+    ;;
+  --help|-h|help)
+    "$REAL_DRIVER" --help
+    ;;
+  mcp)
+    shift
+    exec "$REAL_DRIVER" mcp --embedded --socket "$SOCKET" "$@"
+    ;;
+  status|stop)
+    verb="$1"; shift
+    exec "$REAL_DRIVER" "$verb" --socket "$SOCKET" "$@"
+    ;;
+  *)
+    exec "$REAL_DRIVER" "$@"
+    ;;
+esac

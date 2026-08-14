@@ -60,6 +60,7 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 const ID = 'hermes-bots'
 const ROSTER_KEY = [ID, 'roster']
 const ROUTINES_KEY = [ID, 'routines']
+const COMPUTER_SETTINGS_KEY = 'computer-settings'
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
 
 /** Captured in register() so components can reach plugin storage. */
@@ -3082,6 +3083,151 @@ function RoutinesPane() {
   })
 }
 
+// ── shared computer ─────────────────────────────────────────────────────────
+
+function ComputerPane() {
+  const profile = useValue($selectedBot) || 'default'
+  const [settings, setSettings] = useState({ url: '', token: '' })
+  const [draft, setDraft] = useState({ url: '', token: '' })
+  const [computer, setComputer] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let live = true
+    try {
+      Promise.resolve(pluginCtx?.storage?.get?.(COMPUTER_SETTINGS_KEY))
+        .then(value => {
+          if (!live || !value || typeof value !== 'object') return
+          const next = {
+            url: typeof value.url === 'string' ? value.url : '',
+            token: typeof value.token === 'string' ? value.token : ''
+          }
+          setSettings(next)
+          setDraft(next)
+        })
+        .catch(() => undefined)
+    } catch {
+      /* older shells may not expose plugin storage */
+    }
+    return () => { live = false }
+  }, [])
+
+  async function request(method, suffix) {
+    const base = settings.url.replace(/\/+$/, '')
+    if (!base) throw new Error('Configure the Forever Box URL first.')
+    const response = await fetch(`${base}${suffix}`, {
+      method,
+      headers: settings.token ? { Authorization: `Bearer ${settings.token}` } : {}
+    })
+    const body = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(body.error || `Forever Box returned ${response.status}`)
+    return body
+  }
+
+  async function refresh() {
+    if (!settings.url) return
+    try {
+      const value = await request('GET', `/v1/profiles/${encodeURIComponent(profile)}`)
+      setComputer(value)
+      setError('')
+    } catch (cause) {
+      if (String(cause?.message || cause).includes('not found')) {
+        setComputer(null)
+        setError('')
+      } else {
+        setError(cause instanceof Error ? cause.message : String(cause))
+      }
+    }
+  }
+
+  useEffect(() => {
+    void refresh()
+    const timer = settings.url ? setInterval(() => void refresh(), 5000) : null
+    return () => { if (timer) clearInterval(timer) }
+  }, [profile, settings.url, settings.token])
+
+  async function saveSettings() {
+    const next = { url: draft.url.trim().replace(/\/+$/, ''), token: draft.token.trim() }
+    try {
+      await Promise.resolve(pluginCtx?.storage?.set?.(COMPUTER_SETTINGS_KEY, next))
+      setSettings(next)
+      setError('')
+      host.notify({ kind: 'success', message: 'Forever Box connection saved.' })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+
+  async function act(action) {
+    setBusy(true)
+    setError('')
+    try {
+      const method = action === 'stop' ? 'DELETE' : 'POST'
+      const suffix = action === 'stop'
+        ? `/v1/profiles/${encodeURIComponent(profile)}`
+        : `/v1/profiles/${encodeURIComponent(profile)}/ensure`
+      setComputer(await request(method, suffix))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!settings.url) {
+    return jsxs('div', {
+      className: 'flex h-full flex-col gap-3 overflow-auto p-4',
+      children: [
+        jsx('div', { className: 'text-sm font-medium', children: 'Connect the shared Forever Box' }),
+        jsx('p', { className: 'text-xs leading-relaxed text-ink-secondary', children: 'Use the Tailscale broker URL and token created by the self-hosted deployment.' }),
+        jsx(Input, { value: draft.url, placeholder: 'http://100.x.x.x:8787', onChange: event => setDraft({ ...draft, url: event.target.value }) }),
+        jsx(Input, { type: 'password', value: draft.token, placeholder: 'Broker token', onChange: event => setDraft({ ...draft, token: event.target.value }) }),
+        jsx(Button, { onClick: () => void saveSettings(), disabled: !draft.url.trim(), children: 'Save connection' }),
+        error ? jsx('div', { className: 'text-xs text-danger', children: error }) : null
+      ]
+    })
+  }
+
+  return jsxs('div', {
+    className: 'flex h-full min-h-0 flex-col gap-3 p-3',
+    children: [
+      jsxs('div', {
+        className: 'flex items-center justify-between gap-2',
+        children: [
+          jsxs('div', { children: [
+            jsx('div', { className: 'text-sm font-medium', children: `${profile} computer` }),
+            jsx('div', { className: 'text-[11px] text-ink-secondary', children: computer?.ready ? `${computer.display} · private persistent browser` : 'No active monitor' })
+          ] }),
+          jsxs('div', { className: 'flex gap-2', children: [
+            computer?.running
+              ? jsx(Button, { size: 'sm', disabled: busy, onClick: () => void act('stop'), children: 'Stop' })
+              : jsx(Button, { size: 'sm', disabled: busy, onClick: () => void act('ensure'), children: busy ? 'Starting…' : 'Start computer' }),
+            jsx(Button, { size: 'sm', disabled: !computer?.viewer_url, onClick: () => window.open(computer.viewer_url, '_blank', 'noopener,noreferrer'), children: 'Open' })
+          ] })
+        ]
+      }),
+      error ? jsx('div', { className: 'rounded bg-danger/10 px-3 py-2 text-xs text-danger', children: error }) : null,
+      computer?.viewer_url
+        ? jsx('iframe', {
+            src: computer.viewer_url,
+            title: `${profile} computer`,
+            className: 'min-h-0 flex-1 rounded border border-border bg-black',
+            allow: 'clipboard-read; clipboard-write'
+          })
+        : jsx(EmptyState, { title: 'Computer sleeping', description: 'Start it to create this bot’s private screen inside the shared Linux box.' }),
+      jsxs('details', { className: 'text-xs text-ink-secondary', children: [
+        jsx('summary', { className: 'cursor-pointer', children: 'Connection settings' }),
+        jsxs('div', { className: 'mt-2 flex flex-col gap-2', children: [
+          jsx(Input, { value: draft.url, onChange: event => setDraft({ ...draft, url: event.target.value }) }),
+          jsx(Input, { type: 'password', value: draft.token, onChange: event => setDraft({ ...draft, token: event.target.value }) }),
+          jsx(Button, { size: 'sm', onClick: () => void saveSettings(), children: 'Update' })
+        ] })
+      ] })
+    ]
+  })
+}
+
 // ── roster pane ──────────────────────────────────────────────────────────────
 
 function BotsPane() {
@@ -3293,6 +3439,18 @@ export default {
         width: '250px'
       },
       render: () => jsx(RoutinesPane, {})
+    })
+
+    ctx.register({
+      id: 'computer',
+      area: 'panes',
+      title: 'Computer',
+      data: {
+        placement: 'main',
+        dock: { pane: 'workspace', pos: 'bottom' },
+        height: '360px'
+      },
+      render: () => jsx(ComputerPane, {})
     })
 
     ctx.register({

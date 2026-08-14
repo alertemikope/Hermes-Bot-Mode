@@ -55,6 +55,12 @@ git clone https://github.com/NousResearch/Hermes-Bot-Mode ~/.hermes/desktop-plug
 
 Then reload plugins in the Hermes desktop app (Ctrl+K → "Reload desktop plugins") or restart the app. A **Bots** tab appears next to Sessions, and a **Routines** tile docks beside the conversation.
 
+### Self-hosted Computer / Forever Box
+
+This fork can give every bot a stable private desktop inside one shared Linux container, matching Grok Bot's shared-box/per-agent-monitor topology. The deployment includes persistent Chromium profiles, Cua Driver routing, noVNC, a bearer-protected assignment broker, Tailscale-only port binding, resource limits, and automatic restart.
+
+See [`forever-box/README.md`](forever-box/README.md). Once connected, the desktop plugin adds a **Computer** pane that follows the currently selected bot.
+
 ### Requirements
 
 - Hermes desktop app with the plugin SDK (any recent build)
